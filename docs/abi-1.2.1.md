@@ -285,6 +285,15 @@ side; no audio callback or cross-role publication is added. The two calls are
 authenticated profile edits. Other stock instructions and note routing remain
 unchanged. This reports stock note activity, not audio-envelope state.
 
+Drum trigger drawing reads the last played pitch at `8d4d6cb0`, which stock's
+counter writer `8d4d6c32` updates from both sequenced-note dispatch
+(`8d592092`) and live-note dispatch (`8d595838`). The live held-key map is
+not a sequencer event map. The GUI resolves that played pitch to its canonical
+pad and decodes its model/control snapshot independently of the selected
+pad used by the header. It adds no hook or cross-role state. Intermediate
+hits can coalesce between display frames; current GUI offsets are not a
+record of past audio-side step locks.
+
 Stock paints the screen slots in ascending page order each frame, so page
 numbers are layers. The compositor's loop advance is hooked: when the selected
 page is an owned synth's, it is painted right after slot 0, beneath stock

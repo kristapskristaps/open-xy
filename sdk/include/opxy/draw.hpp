@@ -69,14 +69,20 @@ struct Input {
     u32 shift;
     u8 choices[4];
     u32 model;               // A drum kit's selected key's model (its machine); 0 for other kinds.
+    // Latest played drum pad on this track, independently of the selected pad.
+    // 0 when unavailable; read only when note_serial changes. Controls are
+    // the pad's GUI snapshot with current track offsets, not an event queue.
+    u32 trigger_key, trigger_model;
+    i32 trigger_controls[parameter_slots];
 };
 const u32 notes_unavailable = 0xffffffffu;
-static_assert(sizeof(Input) == 88 && __builtin_offsetof(Input, elapsed) == 16 && __builtin_offsetof(Input, track) == 20 &&
+static_assert(sizeof(Input) == 128 && __builtin_offsetof(Input, elapsed) == 16 && __builtin_offsetof(Input, track) == 20 &&
               __builtin_offsetof(Input, note_serial) == 24 && __builtin_offsetof(Input, reduced_motion) == 28 &&
               __builtin_offsetof(Input, shown) == 32 && __builtin_offsetof(Input, slots) == 36 &&
               __builtin_offsetof(Input, held_notes) == 68 && __builtin_offsetof(Input, note_off_serial) == 72 &&
               __builtin_offsetof(Input, shift) == 76 && __builtin_offsetof(Input, choices) == 80 &&
-              __builtin_offsetof(Input, model) == 84,
+              __builtin_offsetof(Input, model) == 84 && __builtin_offsetof(Input, trigger_key) == 88 &&
+              __builtin_offsetof(Input, trigger_model) == 92 && __builtin_offsetof(Input, trigger_controls) == 96,
               "Drawing input layout (display.mjs)");
 static_assert(sizeof(Node) == 28 && sizeof(Text) == 36, "Drawing frame layout (display.mjs)");
 

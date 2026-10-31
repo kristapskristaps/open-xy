@@ -128,11 +128,13 @@ modules to use the new fields.
 | `shift` | 1 while Shift is held on a page with Shift controls (a drum kit's), else 0. |
 | `choices` | Each Shift control's choice, 0 beyond the declared ones. A drum kit with model groups gives its selected key's group, the model's place in the group and its choke group (0 none, 1..3); one without groups gives the model and the choke group. They hold whether or not Shift is held, so a screen can show them in its header either way. |
 | `model` | A drum kit's selected key's model. |
+| `trigger_key`, `trigger_model`, `trigger_controls[8]` | The latest played drum pad on this track: canonical key 53..76, its model, and its eight controls with current GUI track offsets. `trigger_key` is 0 when unavailable. Use the snapshot when `note_serial` changes; it is independent of selection. Several hits between frames can coalesce to the last one, and this is not an audio-side step-lock history. |
 
 A screen that draws its own header (the two-page header) shows the Shift
 controls in its edited row while `shift` is 1, as the stock header does. The
-previews use drawing ABI 4, an 88-byte input; ABI 3 (84 bytes) ends after
-`choices`.
+previews use drawing ABI 5, a 128-byte input; ABI 4 (88 bytes) ends after
+`model`, and ABI 3 (84 bytes) ends after `choices`. The browser accepts older
+ABIs with their original input sizes.
 
 ## Frame
 
