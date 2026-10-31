@@ -538,7 +538,7 @@ def _frame_delta(text):
     return 0
 
 
-def audio_stack_bounds(disassembly, module, base, symbols, machines):
+def audio_stack_bounds(disassembly, module, base, symbols, machines, data_ranges):
     """Worst-case stack bytes of each machine's audio entry; recursion fails the build.
 
     Frames are the deepest SP excursion along each function (LINK counts its
@@ -546,6 +546,7 @@ def audio_stack_bounds(disassembly, module, base, symbols, machines):
     reach any function whose address is stored in module data (except the SDK
     method tables, which only stock calls). Indirect calls are expanded one
     level: the bound covers a dispatch through a table, not a chain of them.
+    Dispatch words come from ELF data sections, never instruction encodings.
     """
     starts, body, current = [], {}, None
     for line in disassembly.splitlines():
@@ -559,7 +560,9 @@ def audio_stack_bounds(disassembly, module, base, symbols, machines):
     owner = lambda address: max((s for s in starts if s <= address), default=None)
     tables = [(v['value'], v['value'] + v['size']) for name, v in symbols.items() if name.endswith('vtable')]
     word = lambda at: int.from_bytes(module[at - base:at - base + 4], 'little')
-    taken = {w for at in range(base, base + len(module) - 3, 4)
+    require(all(base <= lo <= hi <= base + len(module) for lo, hi in data_ranges),
+            'Call-graph data outside the initialized module')
+    taken = {w for start, end in data_ranges for at in range((start + 3) & ~3, end - 3, 4)
              if not any(lo <= at < hi for lo, hi in tables) and (w := word(at)) in body}
     memo, active = {}, set()
 
@@ -632,7 +635,9 @@ def check_module(directory, tools, profile, machines, profiling=True, runtime_me
                                    label['size'], symbols['kit_startup_label_text']['value']),
             'Unexpected startup label thunk')
     (directory / 'disassembly.txt').write_text(disassembly, encoding='utf-8')
-    stack = audio_stack_bounds(disassembly, module, low, symbols, machines)
+    data_ranges = [(s['address'], s['address'] + s['size']) for name, s in allocated.items()
+                   if name in ('.rodata', '.data')]
+    stack = audio_stack_bounds(disassembly, module, low, symbols, machines, data_ranges)
     sizes = dict(initialized_bytes=len(module), bss_bytes=allocated['.bss']['size'],
                  allocated_span_bytes=intervals[-1][1] - low)
     limit = module_bytes(profile)
