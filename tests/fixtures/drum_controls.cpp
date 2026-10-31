@@ -418,7 +418,7 @@ int main() {
 
     // Reject malformed or unowned extensions without reading an incomplete
     // tail or leaving the preceding matching audition active.
-    for (unsigned bad = 0; bad < 10+!OPXY_SAMPLE_SLICE_TIMING; ++bad) {
+    for (unsigned bad = 0; bad < 11+!OPXY_SAMPLE_SLICE_TIMING; ++bad) {
         sdk_sample_slice_receive(&audition_context, valid_packet);
         unsigned char broken[256]; std::memcpy(broken, valid_packet, sizeof(broken));
         switch (bad) {
@@ -432,7 +432,8 @@ int main() {
         case 7: put_word(broken + 40, 2); break;
         case 8: ready = false; break;
         case 9: put_word(broken + 16, 36); break;
-        case 10: put_word(broken + 40, 1); break; // Processed snapshots were not compiled.
+        case 10: put_word(broken + 16, 35+256); break; // Never truncate an unowned full-width ID.
+        case 11: put_word(broken + 40, 1); break; // Processed snapshots were not compiled.
         }
         sdk_sample_slice_receive(&audition_context, broken);
         check(sdk_sample_create_voice(35, output, 23, 0) == 1 && !preview_seen);

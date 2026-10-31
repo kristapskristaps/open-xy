@@ -63,9 +63,13 @@ struct AudioRange { u32 begin, end, frames; };
 #endif
 // Track/key identity belongs to the validated array index. Raw previews never
 // read the processed clock's parameters or settings.
-struct AudioSource { u32 serial, engine; AudioRange range; };
-static_assert(sizeof(AudioSource) == (OPXY_SAMPLE_SLICE_TIMING ? 76 : 20), "Slice snapshot storage");
+struct AudioSource { u32 serial; AudioRange range; };
+static_assert(sizeof(AudioSource) == (OPXY_SAMPLE_SLICE_TIMING ? 72 : 16), "Slice snapshot storage");
+static_assert(kNoEngine <= 255, "Slice engine byte must represent none");
 volatile AudioSource audio_source[kTracks][128];
+// Separate engine bytes avoid padding each entry while keeping every sequence
+// word and range naturally aligned. The packet still carries a full u32 ID.
+volatile opxy::u8 audio_engine[kTracks][128];
 // GUI-only context for the synchronous source note-on/off. Musical note
 // transforms must not change which sample the slicer auditions. Keeping this
 // scoped to the call leaves ordinary keys, sequencing and MIDI routing stock.
@@ -113,11 +117,11 @@ SliceSource decode_source(const unsigned char* bytes) {
     for (u32 i = 0; i < 8; ++i) r.parameters[i] = i32(words[12 + i]);
     return source;
 }
-void publish_audio_source(volatile AudioSource& destination, const SliceSource* source) {
+void publish_audio_source(volatile AudioSource& destination, volatile opxy::u8& engine, const SliceSource* source) {
     const u32 serial = (destination.serial + 1u) | 1u;
     destination.serial = serial;
     barrier();
-    destination.engine = source ? source->engine : kNoEngine;
+    engine = static_cast<opxy::u8>(source ? source->engine : kNoEngine);
     if (source) {
 #if OPXY_SAMPLE_SLICE_TIMING
         copy_range(destination.range, source->range);
@@ -259,7 +263,8 @@ void sdk_sample_slice_receive(void*, const unsigned char* message) {
     const u32 track = payload[0], key = payload[1];
     if (track >= kTracks || key >= 128 || !payload[6]) return;
     volatile AudioSource& destination = audio_source[track][key];
-    if (destination.engine != kNoEngine) publish_audio_source(destination, nullptr);
+    volatile opxy::u8& slot_engine = audio_engine[track][key];
+    if (slot_engine != kNoEngine) publish_audio_source(destination, slot_engine, nullptr);
     if (size != kSlicePayload || get_word(payload + 8) != kSliceMagic) return;
     const SliceSource source = decode_source(payload + 8);
     const SampleMachine* machine = sdk_sample_machine(source.engine);
@@ -270,7 +275,8 @@ void sdk_sample_slice_receive(void*, const unsigned char* message) {
     if (source.range.processed && (!machine->slice_clock || source.range.bpm_x10 < 200 ||
         source.range.bpm_x10 > 3000)) return;
     if (source.range.processed && !OPXY_SAMPLE_SLICE_TIMING) return;
-    publish_audio_source(destination, &source);
+    if (source.engine != static_cast<opxy::u8>(source.engine)) return;
+    publish_audio_source(destination, slot_engine, &source);
 }
 
 // 8d51aeb6: output is the parent voice's machine pointer at +0x94. Its +0x56
@@ -284,7 +290,7 @@ u32 sdk_sample_create_voice(u32 engine, void** output, u32 index, u32 track) {
     if (received) {
         source.serial = received->serial;
         barrier();
-        source.engine = received->engine;
+        source.engine = audio_engine[track][parent[0x50]];
         source.track = track;
         source.key = parent[0x50];
 #if OPXY_SAMPLE_SLICE_TIMING

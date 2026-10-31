@@ -24,12 +24,14 @@ constexpr u32 kChunkFrames = 4096;
 struct Entry {
     // The owner is published last and cleared before storage is released.
     const void* volatile owner;
-    u32 engine;
     opxy::SampleAnalysis analysis;
-    bool ready;
-    u32 failure;  // progress state of an unsuccessful preparation, else 0
     u32* storage;
     u32 bytes;
+    // Registration IDs fit the profile's engine table; failure is 0, 3 or 4.
+    // Group bounded metadata together rather than padding each small field.
+    opxy::u16 engine;
+    opxy::u8 failure;
+    bool ready;
 };
 static Entry entries[kEntries];
 struct Progress {
