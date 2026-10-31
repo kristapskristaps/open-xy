@@ -63,6 +63,7 @@ def generate_voice(directory, m, sweep=False):
     if m.kind == 'drum':
         values['MODEL_COUNT'] = m.definition['resources']['modelCount']
         values['CHOKE'] = 'true' if m.definition['resources'].get('chokeSameKey', 0) else 'false'
+        values['PARAMETER_EDIT'] = m.definition['resources'].get('parameterEdit', 0)
     return expand('drum_voice.cpp.in' if m.kind == 'drum' else 'voice.cpp.in', values, Path(directory) / 'voice.cpp')
 
 
@@ -79,13 +80,17 @@ def generate_drum_callbacks(directory, machines):
                          f'const char* {p}_drum_model_name(opxy::u32) __asm__("{p}_drum_model_name");',
                          f'opxy::u32 {p}_drum_count(opxy::u32) __asm__("{p}_drum_count");']
         groups = m.definition['resources'].get('modelGroups', [])
+        edit = m.definition['resources'].get('parameterEdit', 0)
+        if edit:
+            declarations.append(f'opxy::u32 {p}_drum_edit_value(opxy::u32, opxy::u32, opxy::u32, opxy::i32) __asm__("{p}_drum_edit_value");')
         if groups:
             declarations += [f'static const opxy::u8 {p}_group_sizes[] = {{{", ".join(str(g["count"]) for g in groups)}}};',
                              f'static const char* const {p}_group_names[] = {{{", ".join(json.dumps(g["label"]) for g in groups)}}};']
         # Audio classification must not require a screen constructed on the GUI role.
         rows.append(f'    {{{p}_engine_id, {p}_record_ready, {m.definition["resources"]["modelCount"]}, '
                     f'{p}_drum_defaults, {p}_drum_label, {p}_drum_model_name, {p}_drum_count, {len(groups)}, '
-                    f'{p + "_group_sizes" if groups else "nullptr"}, {p + "_group_names" if groups else "nullptr"}}},')
+                    f'{p + "_group_sizes" if groups else "nullptr"}, {p + "_group_names" if groups else "nullptr"}, '
+                    f'{p + "_drum_edit_value" if edit else "nullptr"}}},')
     source = '#include "drum_machines.hpp"\nextern "C" {\n' + '\n'.join(declarations) + '\n}\n'
     source += 'const opxy::platform::DrumMachine sdk_drum_machines[] = {\n' + ('\n'.join(rows) or '    {},') + '\n};\n'
     source += f'const opxy::u32 sdk_drum_machine_count = {len(rows)};\n'

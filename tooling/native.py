@@ -284,6 +284,8 @@ def absent_symbols(m):
             # The shared drum table names these.
             absent.update({m.prefix + suffix: 'kit_absent' for suffix in
                            ('_drum_defaults', '_drum_label', '_drum_model_name', '_drum_count')})
+            if m.definition['resources'].get('parameterEdit', 0):
+                absent[m.prefix + '_drum_edit_value'] = 'kit_absent'
         if m.display == 'stock':
             # The shared sample table names these; unselected, its ready check declines first.
             absent.update({symbol: 'kit_absent' for symbol in sample_callbacks(m)})

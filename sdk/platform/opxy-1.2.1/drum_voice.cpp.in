@@ -226,6 +226,12 @@ void @PREFIX@_drum_defaults(opxy::u32 key, opxy::u8* model, opxy::u8* controls) 
 const char* @PREFIX@_drum_label(opxy::u32 model, opxy::u32 slot) { return @NAMESPACE@::parameter_name(model, slot); }
 const char* @PREFIX@_drum_model_name(opxy::u32 model) { return @NAMESPACE@::model_name(model); }
 opxy::u32 @PREFIX@_drum_count(opxy::u32 model) { return @NAMESPACE@::parameter_count(model); }
+#if @PARAMETER_EDIT@
+opxy::u32 @PREFIX@_drum_edit_value(opxy::u32, opxy::u32, opxy::u32, opxy::i32) __asm__("@PREFIX@_drum_edit_value");
+opxy::u32 @PREFIX@_drum_edit_value(opxy::u32 model, opxy::u32 slot, opxy::u32 value, opxy::i32 delta) {
+    return @NAMESPACE@::edit_parameter(model, slot, value, delta);
+}
+#endif
 const void* const @PREFIX@_vtable[11] = {
     reinterpret_cast<const void*>(&@PREFIX@_destroy), reinterpret_cast<const void*>(&@PREFIX@_destroy),
     reinterpret_cast<const void*>(&render_normal), reinterpret_cast<const void*>(&@PREFIX@_render),
