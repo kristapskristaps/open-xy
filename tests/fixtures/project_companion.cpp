@@ -3,6 +3,7 @@
 // project_companion <path> <save result>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <project_companion.cpp>
 
 using opxy::platform::Address;
@@ -49,6 +50,25 @@ Address opxy::platform::host_stock_address(Address address) {
 
 int main(int argc, char** argv) {
     if (argc != 3) return 2;
+    if (std::strcmp(argv[2], "numbers") == 0) {
+        std::FILE* file = std::fopen(argv[1], "wb");
+        if (!file) return 1;
+        Writer writer(file);
+        for (unsigned v = 0; v < 1000; ++v) { writer.number(v); writer.byte('\n'); }
+        for (unsigned place = 1; place <= 1000000000; place *= 10) {
+            writer.number(place - 1); writer.byte('\n');
+            writer.number(place); writer.byte('\n');
+            writer.number(place + 1); writer.byte('\n');
+        }
+        unsigned random = 0xffffffffu;
+        writer.number(random); writer.byte('\n');
+        for (unsigned i = 0; i < 1000; ++i) {
+            random = random * 1664525u + 1013904223u;
+            writer.number(random); writer.byte('\n');
+        }
+        writer.flush(); std::fclose(file);
+        return 0;
+    }
     saving = argv[1];
     save_result = static_cast<unsigned>(std::atoi(argv[2]));
     return sdk_project_save(nullptr, saving) == save_result ? 0 : 1;
