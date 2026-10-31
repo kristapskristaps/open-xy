@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 from . import benchmark, extensions, runtime, screen, startup_label, stock_tables
 from .adapters import (catalog_entry, generate_display, generate_fx_object, generate_registration,
                        generate_registration_stock, generate_sample_voice,
-                       generate_sample_callbacks, generate_screen, generate_screen_order,
+                       generate_sample_callbacks, generate_sample_slice_bridge, generate_screen, generate_screen_order,
                        generate_synth_controls, generate_project_companion_table, generate_voice,
                        generate_drum_callbacks, sample_callbacks)
 from .contributors import validate_source_boundary
@@ -411,6 +411,8 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return cxx(str(generate_screen_order(folder)), obj)
             if step == 'sample_callbacks':
                 return cxx(str(generate_sample_callbacks(folder, machines)), obj)
+            if step == 'drum_controls_stock':
+                return cxx(str(generate_sample_slice_bridge(folder, machines)), obj)
             if step == 'synth_control_table':
                 return cxx(str(generate_synth_controls(folder, machines)), obj)
             if step == 'project_companion_table':

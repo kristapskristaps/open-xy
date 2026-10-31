@@ -309,6 +309,15 @@ def generate_sample_voice(directory, m, benchmark=False):
     return append_callback(path, m) if benchmark else path
 
 
+def generate_sample_slice_bridge(directory, machines):
+    """Size frozen slicer snapshots for every machine the collection can link."""
+    timing = any(m.kind == 'sample' and m.definition['resources'].get('sliceTiming', 0) for m in machines)
+    path = Path(directory) / 'sample_slice_bridge.cpp'
+    path.write_text(f'#define OPXY_SAMPLE_SLICE_TIMING {int(timing)}\n'
+                    '#include "drum_controls_stock.cpp"\n', encoding='utf-8', newline='\n')
+    return path
+
+
 def generate_sample_callbacks(directory, machines):
     """The collection's sample machines as one table (sample_machines.hpp) and the stock-page bridge."""
     declarations, rows = [], []
