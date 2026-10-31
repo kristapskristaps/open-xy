@@ -113,12 +113,25 @@ def _relative(machine_root, value):
     return value
 
 
-def check_preset(value, identity):
+def drum_preset_regions(regions):
+    """Sample-free Drumline records carrying the public kit's packed pad words."""
+    return isinstance(regions, list) and len(regions) == 24 and all(
+        isinstance(region, dict) and {'model', 'params'} <= set(region) and
+        set(region) <= {'model', 'params', 'playmode', 'hikey'} and region['model'] == 'fm slap' and
+        isinstance(region['params'], list) and len(region['params']) == 4 and
+        all(type(n) is int and 0 <= n <= 32767 for n in region['params']) and
+        region.get('playmode', 'oneshot') in ('gate', 'oneshot', 'mute1', 'loop', 'mute2', 'mute3') and
+        ('hikey' not in region or type(region['hikey']) is int and region['hikey'] == 53 + index)
+        for index, region in enumerate(regions))
+
+
+def check_preset(value, identity, kind='synth'):
     """A preset as the device saves it (version 4), for this machine and pointing at no samples."""
     engine = value.get('engine') if isinstance(value, dict) else None
     params = engine.get('params') if isinstance(engine, dict) else None
+    regions = value.get('regions') if isinstance(value, dict) else None
     require(isinstance(value, dict) and value.get('version') == 4 and value.get('platform') == 'OP-XY' and
-            value.get('type') == identity and value.get('regions') == [] and isinstance(params, list) and
+            value.get('type') == identity and (regions == [] or kind == 'drum' and drum_preset_regions(regions)) and isinstance(params, list) and
             len(params) == 8 and all(type(n) is int and 0 <= n <= 32767 for n in params),
             f'A preset is a version 4 OP-XY preset of {identity}, with eight engine params and no sample regions')
     return value
@@ -128,7 +141,7 @@ def reject_constant(name):
     raise ValueError(f'{name} is not JSON')
 
 
-def read_presets(root, folder, identity):
+def read_presets(root, folder, identity, kind='synth'):
     """Each <name>.json in the machine's presets folder, by name."""
     path = root / _relative(root, folder)
     require(path.is_dir(), 'presets names a folder: ' + folder)
@@ -146,7 +159,7 @@ def read_presets(root, folder, identity):
             value = json.loads(data.decode('utf-8'), parse_constant=reject_constant)
         except ValueError as error:
             raise ValueError(f'{file.name}: invalid JSON: {error}') from error
-        presets[file.stem] = check_preset(value, identity)
+        presets[file.stem] = check_preset(value, identity, kind)
     return presets
 
 
@@ -302,7 +315,7 @@ def machine_at(root, identity=None):
     if 'presets' in value:
         require_sdk(version, (1, 3), "A machine's own presets")
         require(kind != 'effect' and isinstance(value['presets'], str), 'presets names a folder; effects have none')
-        presets = read_presets(root, value['presets'], identity)
+        presets = read_presets(root, value['presets'], identity, kind)
     return Machine(id=identity, kind=kind, name=definition['name'], description=value['description'],
                    display=display, sources=sources, includes=includes,
                    definition=definition,

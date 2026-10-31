@@ -676,8 +676,13 @@ firmware that holds it.
 - At most 16 presets, each at most 16 KiB.
 - Each is a version 4 OP-XY preset whose `type` is the machine's ID, with
   eight engine `params` from 0 to 32767 and no sample `regions`, since a
-  preset never points into a user's sample library. Other fields stay as the
-  device saved them.
+  preset never points into a user's sample library. A synthesis drum kit may
+  instead store exactly 24 sample-free pad records: `model` is `"fm slap"`
+  (the SDK's stored-pad marker), `params` are its four packed Q15 words, and
+  optional `playmode` names a stock choke/play mode. An optional `hikey` is
+  the canonical key 53..76 in pad order. No other region fields or sample
+  paths are accepted. Keep track parameters neutral to edit saved pad controls
+  freely after loading a kit. Other fields stay as the device saved them.
 
 ### Identity
 
