@@ -10,8 +10,7 @@ inline void display_render(DisplayState* state, const draw::Input*, Frame*) { ++
 // Keep this boundary test away from stock object addresses and SVG setters.
 inline bool display_valid(const Frame*) { return false; }
 }}
-// No drum kit here: the selected pad's notes never strike.
-inline opxy::u32 sdk_drum_pad(opxy::u32, opxy::u32) { return 0; }
+inline opxy::u32 sdk_drum_pad(opxy::u32, opxy::u32 pitch) { return pitch == 60 ? 53 : 54; }
 namespace opxy { namespace screen { namespace {
 struct Vector { u32 begin, end, capacity; };
 struct Command { i32 x, y; u32 type; };
@@ -29,7 +28,8 @@ inline void invalidate(PathNode*) {}
 template<unsigned N> void set_words(Leaf*, const u32 (&)[N], const i32 (&)[N]) {}
 inline void paint(void*, u32, bool) {}
 inline void set_text(Leaf*, const char*) {}
-inline u32 note_serial(u32) { return 0; }
+static u32 fixture_note_starts;
+inline u32 note_serial(u32) { return fixture_note_starts; }
 inline bool refresh_controls(Base*, Controls&) { return false; }
 inline void draw(Base*) {}
 }}}

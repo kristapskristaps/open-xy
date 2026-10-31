@@ -85,6 +85,19 @@ the source archive is published alongside it as described below. Browser kits
 that include these helpers bundle the full license and exception in their
 notices, from [`runtime.LICENSE`](../sdk/platform/blackfin/runtime.LICENSE).
 
+## Native compilation policy
+
+DSP, extra machine source units and shared arithmetic runtime keep `-O2`.
+Generated displays, screen adapters, GUI control/browser services and cold
+startup use `-Os`, reducing code in the shared module. Reports record both
+compiler flag sets and the units using the GUI policy. Drawing helpers
+have internal linkage so retained out-of-line copies remain local to their
+translation unit; both linkers still reject duplicate global definitions.
+The freestanding runtime supplies the compiler's exact unsigned high-word
+multiply helper without requiring 64-bit arithmetic.
+Only drum-kit screens reserve per-pad pitch-history trackers; display inputs
+are callback-local while authored display state and frames remain persistent.
+
 ## Release downloads
 
 `python sdk.py toolchain fetch` downloads this host's archive, checks its

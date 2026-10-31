@@ -6,13 +6,16 @@
 #include "screen.hpp"
 #include "note_activity.hpp"
 
+#ifndef OPXY_SCREEN_DRUM
+#define OPXY_SCREEN_DRUM 1
+#endif
+
 extern "C" opxy::u32 sdk_screen_activation(opxy::u32, opxy::u32) __asm__("sdk_screen_activation");
 
 namespace opxy { namespace screen { namespace {
-// One typed GUI state, input and frame; never accessed by audio callbacks.
+// Persistent GUI state and frame; callback input is rebuilt on the GUI stack.
 binding::DisplayState display_state;
 u32 display_activation;
-draw::Input display_input;
 binding::Frame display_frame;
 
 // A drum kit's display is struck only by its selected pad's notes. Audio and
@@ -20,11 +23,14 @@ binding::Frame display_frame;
 // counter moves, the pitches that started since the last frame (newly held,
 // or released since) are mapped to their pads. A start no pitch accounts for
 // strikes as before, so the screen never misses a hit it cannot place.
+#if OPXY_SCREEN_DRUM
 struct PadNotes { u32 track, valid, notes, serial; u8 held[128], released[128], now[128], now_released[128]; };
 PadNotes pad_notes;
+#endif
 u32 display_note_serial(const Controls& controls) {
     if (controls.track >= 8) return 0;
     const u32 notes = note_serial(controls.track);
+#if OPXY_SCREEN_DRUM
     if (!controls.pad) {
         pad_notes.valid = 0;
         return notes;
@@ -49,6 +55,9 @@ u32 display_note_serial(const Controls& controls) {
     s.notes = notes;
     s.valid = 1;
     return s.serial;
+#else
+    return notes;
+#endif
 }
 
 // Machine: ids[] names the artwork's nodes (the first are the mutable paths),
@@ -150,6 +159,7 @@ template <class Machine> struct Drawing {
             for (u32 p = 0; p < path_count; ++p) o->keys[p] = 0;
             display_activation = activation;
         }
+        draw::Input display_input = {};
         for (u32 i = 0; i < page_controls; ++i) {
             display_input.parameters[i] = controls.values[i];
             display_input.shown[i] = controls.shown[i];

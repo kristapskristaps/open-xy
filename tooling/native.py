@@ -50,6 +50,9 @@ CXX_FLAGS = ['-mcpu=bf707', '-O2', '-std=gnu++11', '-ffreestanding', '-fno-excep
              '-fno-threadsafe-statics', '-fno-use-cxa-atexit', '-fno-asynchronous-unwind-tables',
              '-fno-unwind-tables', '-fno-common', '-fno-tree-loop-distribute-patterns',
              '-fomit-frame-pointer', '-nostdinc++', '-Wall', '-Werror', '-Wno-unused-variable']
+GUI_CXX_FLAGS = ['-Os' if flag == '-O2' else flag for flag in CXX_FLAGS]
+GUI_UNITS = frozenset(('synth_controls', 'synth_control_table', 'drum_values_stock', 'drum_display_stock',
+                       'screen_order', 'sample_slice_clock', 'presets', 'stock_browser', 'startup'))
 # Stock SVG parse (0x8d5f38ba) accepts at most four fractional digits and no exponents.
 SVG_ELEMENTS = {'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'path', 'text'}
 SVG_NUMERIC = {'d', 'points', 'transform', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
@@ -144,7 +147,7 @@ def check_sources(machines):
                 validate_source_boundary(path.read_text(encoding='utf-8'), m.source(path.relative_to(m.root).as_posix()))
 
 
-def compile_cxx(cxx, assembler, source, obj, includes=()):
+def compile_cxx(cxx, assembler, source, obj, includes=(), *, gui=False):
     """cc1plus via the driver to assembly, then the pinned assembler.
 
     The driver never chooses an assembler, so object bytes depend only on the
@@ -154,7 +157,8 @@ def compile_cxx(cxx, assembler, source, obj, includes=()):
     obj = Path(obj).resolve()
     assembly = obj.with_suffix('.s')
     generated = Path(source).is_absolute()
-    flags = [*CXX_FLAGS, *('-I' + str((ROOT / path).resolve()) for path in includes), '-fstack-usage']
+    flags = [*(GUI_CXX_FLAGS if gui else CXX_FLAGS),
+             *('-I' + str((ROOT / path).resolve()) for path in includes), '-fstack-usage']
     subprocess.run([str(cxx), *flags, '-S', Path(source).name if generated else source, '-o', str(assembly)],
                    cwd=Path(source).parent if generated else ROOT, check=True, capture_output=True, text=True,
                    timeout=300, **hidden_process())
@@ -384,8 +388,9 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
     def assemble_unit(source, obj):
         execute([tools['as'], '-mcpu=bf707', '-I', ROOT, '-o', obj, source])
 
-    def cxx(source, obj, m=None):
-        compile_cxx(gcc['cxx'], tools['as'], source, obj, includes(m))
+    def cxx(source, obj, m=None, *, gui=False):
+        compile_cxx(gcc['cxx'], tools['as'], source, obj, includes(m),
+                    gui=gui or (m is None and obj.stem in GUI_UNITS))
 
     def display_unit(folder, m):
         generate_display(folder, machine=m)
@@ -438,7 +443,7 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                   'screen': lambda: generate_screen(folder, m), 'fx_object': lambda: generate_fx_object(folder, m, benchmark=True),
                   'registration': lambda: generate_registration(folder, m),
                   'sample_voice': lambda: generate_sample_voice(folder, m, benchmark=True)}[step]
-        return cxx(str(source()), obj, m)
+        return cxx(str(source()), obj, m, gui=step in ('display', 'screen'))
 
     for name, m, step in plan(machines, profile):
         obj = directory / name
@@ -454,7 +459,10 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
     require(provenance(machines) == before, 'Sources changed during compilation')
     report = dict(schema=1, target=TARGET, status='experimental-unqualified', sources=before,
                   host=host_platform(), tools=host_pins('tools')[0], compiler=host_pins('compiler')[0],
-                  cxx_flags=CXX_FLAGS, profiling=profiling, benchmark_cases=benchmark.cases(linked, sweep),
+                  cxx_flags=CXX_FLAGS, gui_cxx_flags=GUI_CXX_FLAGS, profiling=profiling,
+                  gui_units=[name for name, m, step in plan(machines, profile)
+                             if (m is None and step in GUI_UNITS) or (m is not None and step in ('display', 'screen'))],
+                  benchmark_cases=benchmark.cases(linked, sweep),
                   **({'benchmark_sweep': True} if sweep else {}),
                   sizes=sizes, memory=usage, module_bytes=module_bytes(profile), audio_stack_bytes=stack,
                   reserved_bytes=profile['reserved_bytes'],

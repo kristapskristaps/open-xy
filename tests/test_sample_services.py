@@ -89,6 +89,9 @@ class SampleServices(unittest.TestCase):
     def test_cache_lifetime_capacity_and_browser_deferral(self):
         self.run_fixture('sample_cache')
 
+    def test_freestanding_high_word_multiply_matches_wide_reference(self):
+        self.run_fixture('integer_runtime')
+
     def test_progress_never_takes_over_another_notification(self):
         self.run_fixture('sample_progress')
 
@@ -125,6 +128,9 @@ class SampleServices(unittest.TestCase):
 
     def test_display_activation_resets_state_and_invalidates_geometry_keys(self):
         self.run_fixture('screen_drawing')
+
+    def test_non_drum_screen_needs_no_pad_note_tracker(self):
+        self.run_fixture('screen_drawing', defines=('OPXY_SCREEN_DRUM=0',))
 
     def test_registration_never_overwrites_and_rechecks_stock_state(self):
         self.run_fixture('registration')

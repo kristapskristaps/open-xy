@@ -7,7 +7,10 @@
 static opxy::u32 token = 1;
 opxy::u32 sdk_screen_activation(opxy::u32 page, opxy::u32) { return page == 84 ? token : 0; }
 void sdk_display_note_activity(opxy::u32, opxy::draw::Input*) {}
-void sdk_note_pitches(opxy::u32, opxy::u8*, opxy::u8*) {}
+static opxy::u8 pitches[128], releases[128];
+void sdk_note_pitches(opxy::u32, opxy::u8* held, opxy::u8* released) {
+    for (unsigned i = 0; i < 128; ++i) { held[i] = pitches[i]; released[i] = releases[i]; }
+}
 struct Machine { static const char* const ids[2]; };
 const char* const Machine::ids[2] = {"node", "palette"};
 
@@ -38,5 +41,16 @@ int main() {
     token = 0; object.keys[0] = 77;
     Renderer::animate(&object, controls);
     require(binding::resets == 3 && object.keys[0] == 77);
+    controls.pad = 53;
+    const auto baseline = screen::display_note_serial(controls);
+    pitches[61] = 1; ++screen::fixture_note_starts;
+    const auto other = screen::display_note_serial(controls);
+    require(other == baseline+(OPXY_SCREEN_DRUM ? 0 : 1));
+    pitches[60] = 1; ++screen::fixture_note_starts;
+    require(screen::display_note_serial(controls) == other+1);
+    pitches[60] = 0; ++releases[60];
+    require(screen::display_note_serial(controls) == other+1);
+    pitches[60] = 1; ++screen::fixture_note_starts;
+    require(screen::display_note_serial(controls) == other+2);
     std::puts("native display activation resets state and geometry caches only on a new active token");
 }
