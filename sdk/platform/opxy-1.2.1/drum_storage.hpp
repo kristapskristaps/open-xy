@@ -82,8 +82,19 @@ inline void drum_put(u32* packed, u32 at, u32 bits, u32 value) {
     for (u32 b = 0; b < bits; ++b) packed[(at + b) / 15] |= ((value >> b) & 1u) << ((at + b) % 15);
 }
 inline u32 drum_get(const u32* packed, u32 at, u32 bits) {
-    u32 value = 0;
-    for (u32 b = 0; b < bits; ++b) value |= ((packed[(at + b) / 15] >> ((at + b) % 15)) & 1u) << b;
+    // Read whole fragments instead of dividing every bit position by 15.
+    // Valid fields lie inside the four 15-bit words and contain at most 32 bits.
+    u32 word = 0;
+    while (at >= 15) { at -= 15; ++word; }
+    u32 value = 0, copied = 0;
+    while (copied < bits) {
+        const u32 available = 15 - at;
+        const u32 count = bits - copied < available ? bits - copied : available;
+        value |= ((packed[word] >> at) & ((1u << count) - 1)) << copied;
+        copied += count;
+        ++word;
+        at = 0;
+    }
     return value;
 }
 
