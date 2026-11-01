@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {activeServices, assignNumbers, checkedSelections, chosenByDefault, extensionChoices, extensionSelection, numberLayout, readLayout, readObject, linkKit, moduleBytes, openKit, patchFirmware, readLdr, recoverFirmware, sourceName, sourceUrl, validOrigin, validSource, zipFiles, sha256} from '../builder/core.mjs';
+import {activeServices, assignNumbers, checkedSelections, chosenByDefault, extensionChoices, extensionSelection, numberLayout, readLayout, readSelection, readObject, linkKit, moduleBytes, openKit, patchFirmware, readLdr, recoverFirmware, sourceName, sourceUrl, validOrigin, validSource, zipFiles, sha256} from '../builder/core.mjs';
 
 // Tiny authored ELF fixture, independent of private firmware/toolchains.
 function elf() {
@@ -409,4 +409,17 @@ test('players have stable separate types and share the relocated page pool', () 
   assert.deepEqual(numberLayout(rules, [], layout, machines.slice().reverse()), layout);
   assert.deepEqual([...activeServices(profile, [{kind: 'player'}])].sort(), ['octaves', 'players']);
   assert.throws(() => numberLayout(rules, [], {probeplayer: {player: 4, page: 84}}, machines), /cannot use/);
+});
+
+test('saved choices survive catalog changes and preserve an empty selection', () => {
+  const kit = {profile: {id: 'test'}, machines: [{id: 'a'}, {id: 'new'}],
+    extensions: [{id: 'capture', claims: ['record']}]};
+  const saved = {format: 'opxy-selection/1', profile: 'test',
+    selected: ['a', 'removed', 'a'], extensions: ['capture', 'removed']};
+  assert.deepEqual(readSelection(kit, JSON.parse(JSON.stringify(saved))), {selected: ['a'], extensions: ['capture']});
+  assert.deepEqual(readSelection(kit, {...saved, selected: [], extensions: []}), {selected: [], extensions: []});
+  for (const invalid of [null, {...saved, profile: 'other'}, {...saved, selected: null}, {...saved, extensions: [4]}])
+    assert.throws(() => readSelection(kit, invalid), /Invalid saved selection/);
+  kit.extensions.push({id: 'other', claims: ['record']});
+  assert.throws(() => readSelection(kit, {...saved, extensions: ['capture', 'other']}), /Choose only one/);
 });
