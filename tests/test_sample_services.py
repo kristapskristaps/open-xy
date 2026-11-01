@@ -59,7 +59,7 @@ class SampleServices(unittest.TestCase):
                 elif name == 'benchmark':
                     from tooling.benchmark import generate
                     generate(folder, [replace(fixture('probesynth'), id='unfamiliar', identity=dict(engine=46, page=91))])
-            if name in ('sample_callbacks', 'benchmark', 'drum_controls', 'presets', 'keyboard_octaves', 'sample_slice_clock', 'startup', 'sample_overview'):
+            if name in ('sample_callbacks', 'benchmark', 'drum_controls', 'presets', 'keyboard_octaves', 'sample_slice_clock', 'startup', 'sample_overview', 'drum_trigger'):
                 # Exercise the real tempo readers and assignment bridge with
                 # host addresses standing in for stock functions and globals.
                 stock = (ROOT / 'sdk/platform/opxy-1.2.1/stock.hpp').read_text()
