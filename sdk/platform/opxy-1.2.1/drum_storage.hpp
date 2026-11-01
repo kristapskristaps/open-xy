@@ -81,7 +81,7 @@ inline bool drum_bits(const i32* words, u32* packed) {
 inline void drum_put(u32* packed, u32 at, u32 bits, u32 value) {
     for (u32 b = 0; b < bits; ++b) packed[(at + b) / 15] |= ((value >> b) & 1u) << ((at + b) % 15);
 }
-inline u32 drum_get(const u32* packed, u32 at, u32 bits) {
+static inline u32 drum_get(const u32* packed, u32 at, u32 bits) {
     // Read whole fragments instead of dividing every bit position by 15.
     // Valid fields lie inside the four 15-bit words and contain at most 32 bits.
     u32 word = 0;
