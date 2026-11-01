@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 from . import benchmark, extensions, runtime, screen, startup_label, stock_tables
 from .adapters import (generate_player_object, generate_player_table, catalog_entry, generate_display, generate_fx_object, generate_registration,
                        generate_registration_stock, generate_sample_voice,
-                       generate_sample_callbacks, generate_screen, generate_screen_order,
+                       generate_sample_callbacks, generate_sample_slice_bridge, generate_screen, generate_screen_order,
                        generate_synth_controls, generate_project_companion_table, generate_voice,
                        generate_drum_callbacks, sample_callbacks)
 from .contributors import validate_source_boundary
@@ -51,6 +51,9 @@ CXX_FLAGS = ['-mcpu=bf707', '-O2', '-std=gnu++11', '-ffreestanding', '-fno-excep
              '-fno-threadsafe-statics', '-fno-use-cxa-atexit', '-fno-asynchronous-unwind-tables',
              '-fno-unwind-tables', '-fno-common', '-fno-tree-loop-distribute-patterns',
              '-fomit-frame-pointer', '-nostdinc++', '-Wall', '-Werror', '-Wno-unused-variable']
+GUI_CXX_FLAGS = ['-Os' if flag == '-O2' else flag for flag in CXX_FLAGS]
+GUI_UNITS = frozenset(('synth_controls', 'synth_control_table', 'drum_values_stock', 'drum_display_stock',
+                       'screen_order', 'sample_slice_clock', 'presets', 'stock_browser', 'startup'))
 # Stock SVG parse (0x8d5f38ba) accepts at most four fractional digits and no exponents.
 SVG_ELEMENTS = {'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'path', 'text'}
 SVG_NUMERIC = {'d', 'points', 'transform', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
@@ -150,7 +153,7 @@ def check_sources(machines):
                 validate_source_boundary(path.read_text(encoding='utf-8'), m.source(path.relative_to(m.root).as_posix()))
 
 
-def compile_cxx(cxx, assembler, source, obj, includes=()):
+def compile_cxx(cxx, assembler, source, obj, includes=(), *, gui=False):
     """cc1plus via the driver to assembly, then the pinned assembler.
 
     The driver never chooses an assembler, so object bytes depend only on the
@@ -160,7 +163,8 @@ def compile_cxx(cxx, assembler, source, obj, includes=()):
     obj = Path(obj).resolve()
     assembly = obj.with_suffix('.s')
     generated = Path(source).is_absolute()
-    flags = [*CXX_FLAGS, *('-I' + str((ROOT / path).resolve()) for path in includes), '-fstack-usage']
+    flags = [*(GUI_CXX_FLAGS if gui else CXX_FLAGS),
+             *('-I' + str((ROOT / path).resolve()) for path in includes), '-fstack-usage']
     subprocess.run([str(cxx), *flags, '-S', Path(source).name if generated else source, '-o', str(assembly)],
                    cwd=Path(source).parent if generated else ROOT, check=True, capture_output=True, text=True,
                    timeout=300, **hidden_process())
@@ -299,6 +303,8 @@ def absent_symbols(m):
             # The shared drum table names these.
             absent.update({m.prefix + suffix: 'kit_absent' for suffix in
                            ('_drum_defaults', '_drum_label', '_drum_model_name', '_drum_count')})
+            if m.definition['resources'].get('parameterEdit', 0):
+                absent[m.prefix + '_drum_edit_value'] = 'kit_absent'
         if m.kind == 'sample':
             # The shared sample table names these; unselected, its ready check declines first.
             absent.update({symbol: 'kit_absent' for symbol in sample_callbacks(m)})
@@ -399,8 +405,9 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
     def assemble_unit(source, obj):
         execute([tools['as'], '-mcpu=bf707', '-I', ROOT, '-o', obj, source])
 
-    def cxx(source, obj, m=None):
-        compile_cxx(gcc['cxx'], tools['as'], source, obj, includes(m))
+    def cxx(source, obj, m=None, *, gui=False):
+        compile_cxx(gcc['cxx'], tools['as'], source, obj, includes(m),
+                    gui=gui or (m is None and obj.stem in GUI_UNITS))
 
     def display_unit(folder, m):
         generate_display(folder, machine=m)
@@ -426,6 +433,8 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return cxx(str(generate_screen_order(folder)), obj)
             if step == 'sample_callbacks':
                 return cxx(str(generate_sample_callbacks(folder, machines)), obj)
+            if step == 'drum_controls_stock':
+                return cxx(str(generate_sample_slice_bridge(folder, machines)), obj)
             if step == 'synth_control_table':
                 return cxx(str(generate_synth_controls(folder, machines)), obj)
             if step == 'player_table':
@@ -457,7 +466,7 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                   'registration': lambda: generate_registration(folder, m),
                   'sample_voice': lambda: generate_sample_voice(folder, m, benchmark=True),
                   'player_object': lambda: generate_player_object(folder, m)}[step]
-        return cxx(str(source()), obj, m)
+        return cxx(str(source()), obj, m, gui=step in ('display', 'screen'))
 
     for name, m, step in plan(machines, profile):
         obj = directory / name
@@ -473,7 +482,10 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
     require(provenance(machines) == before, 'Sources changed during compilation')
     report = dict(schema=1, target=TARGET, status='experimental-unqualified', sources=before,
                   host=host_platform(), tools=host_pins('tools')[0], compiler=host_pins('compiler')[0],
-                  cxx_flags=CXX_FLAGS, profiling=profiling, benchmark_cases=benchmark.cases(linked, sweep),
+                  cxx_flags=CXX_FLAGS, gui_cxx_flags=GUI_CXX_FLAGS, profiling=profiling,
+                  gui_units=[name for name, m, step in plan(machines, profile)
+                             if (m is None and step in GUI_UNITS) or (m is not None and step in ('display', 'screen'))],
+                  benchmark_cases=benchmark.cases(linked, sweep),
                   **({'benchmark_sweep': True} if sweep else {}),
                   sizes=sizes, memory=usage, module_bytes=module_bytes(profile), audio_stack_bytes=stack,
                   reserved_bytes=profile['reserved_bytes'],
@@ -549,7 +561,7 @@ def _frame_delta(text):
     return 0
 
 
-def audio_stack_bounds(disassembly, module, base, symbols, machines):
+def audio_stack_bounds(disassembly, module, base, symbols, machines, data_ranges):
     """Worst-case stack bytes of each machine's audio entry; recursion fails the build.
 
     Frames are the deepest SP excursion along each function (LINK counts its
@@ -557,6 +569,7 @@ def audio_stack_bounds(disassembly, module, base, symbols, machines):
     reach any function whose address is stored in module data (except the SDK
     method tables, which only stock calls). Indirect calls are expanded one
     level: the bound covers a dispatch through a table, not a chain of them.
+    Dispatch words come from ELF data sections, never instruction encodings.
     """
     starts, body, current = [], {}, None
     for line in disassembly.splitlines():
@@ -570,7 +583,9 @@ def audio_stack_bounds(disassembly, module, base, symbols, machines):
     owner = lambda address: max((s for s in starts if s <= address), default=None)
     tables = [(v['value'], v['value'] + v['size']) for name, v in symbols.items() if name.endswith('vtable')]
     word = lambda at: int.from_bytes(module[at - base:at - base + 4], 'little')
-    taken = {w for at in range(base, base + len(module) - 3, 4)
+    require(all(base <= lo <= hi <= base + len(module) for lo, hi in data_ranges),
+            'Call-graph data outside the initialized module')
+    taken = {w for start, end in data_ranges for at in range((start + 3) & ~3, end - 3, 4)
              if not any(lo <= at < hi for lo, hi in tables) and (w := word(at)) in body}
     memo, active = {}, set()
 
@@ -645,7 +660,9 @@ def check_module(directory, tools, profile, machines, profiling=True, runtime_me
                                    label['size'], symbols['kit_startup_label_text']['value']),
             'Unexpected startup label thunk')
     (directory / 'disassembly.txt').write_text(disassembly, encoding='utf-8')
-    stack = audio_stack_bounds(disassembly, module, low, symbols, machines)
+    data_ranges = [(s['address'], s['address'] + s['size']) for name, s in allocated.items()
+                   if name in ('.rodata', '.data')]
+    stack = audio_stack_bounds(disassembly, module, low, symbols, machines, data_ranges)
     sizes = dict(initialized_bytes=len(module), bss_bytes=allocated['.bss']['size'],
                  allocated_span_bytes=intervals[-1][1] - low)
     limit = module_bytes(profile)

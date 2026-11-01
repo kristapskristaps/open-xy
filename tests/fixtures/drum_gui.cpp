@@ -30,6 +30,25 @@ void defaults(u32 note, u8* model, u8* values) {
 const char* label(u32 model, u32 slot) { return model ? "short" : slot == 2 || slot == 7 ? "" : "full"; }
 const char* name(u32 model) { return model ? "short" : "full"; }
 u32 count(u32 model) { return model ? 3 : 8; }
+u32 edit_calls;
+i32 edit_delta;
+bool invalid_edit;
+u32 custom_edit(u32 model, u32 slot, u32 value, i32 delta) {
+    ++edit_calls; edit_delta = delta;
+    if (invalid_edit) return 128;
+    if (slot) {
+        const i32 next = static_cast<i32>(value) + delta;
+        return static_cast<u32>(next < 0 ? 0 : next > 127 ? 127 : next);
+    }
+    const u32 choices[2][3] = {{16,48,112},{16,112,112}};
+    const u32 size = model ? 2 : 3;
+    u32 current = 0;
+    while (current + 1 < size && value >= (choices[model][current] + choices[model][current + 1]) / 2) ++current;
+    i32 next = static_cast<i32>(current) + delta;
+    if (next < 0) next = 0;
+    if (next >= static_cast<i32>(size)) next = static_cast<i32>(size) - 1;
+    return next == static_cast<i32>(current) ? value : choices[model][next];
+}
 bool format(u32, i32, char*) { return false; }
 u32 get_engine(u32 selected) { require(selected == track); return engine; }
 u32 get_key(u32 selected) { require(selected == track); return key; }
@@ -66,15 +85,17 @@ static const char* const group_names[] = {"ONE", "TWO"};
 const opxy::platform::DrumMachine sdk_drum_machines[] = {
     {reinterpret_cast<const char*>(34), ready, 2, defaults, label, name, count},
     {reinterpret_cast<const char*>(37), ready, 5, defaults, label, name, count, 2, group_sizes, group_names},
-    {reinterpret_cast<const char*>(38), ready, 33, defaults, label, name, count}
+    {reinterpret_cast<const char*>(38), ready, 33, defaults, label, name, count},
+    {reinterpret_cast<const char*>(39), ready, 2, defaults, label, name, count, 0, nullptr, nullptr, custom_edit}
 };
-const opxy::u32 sdk_drum_machine_count = 3;
+const opxy::u32 sdk_drum_machine_count = 4;
 const opxy::platform::SynthControls sdk_synth_controls[] = {
     {reinterpret_cast<const char*>(34), ready, {4,5,6,7,0,1,2,3}, 0, {}, format, false, true},
     {reinterpret_cast<const char*>(37), ready, {4,5,6,7,0,1,2,3}, 0, {}, format, false, true},
-    {reinterpret_cast<const char*>(38), ready, {4,5,6,7,0,1,2,3}, 0, {}, format, false, true}
+    {reinterpret_cast<const char*>(38), ready, {4,5,6,7,0,1,2,3}, 0, {}, format, false, true},
+    {reinterpret_cast<const char*>(39), ready, {4,5,6,7,0,1,2,3}, 0, {}, format, false, true}
 };
-const opxy::u32 sdk_synth_control_count = 3;
+const opxy::u32 sdk_synth_control_count = 4;
 }
 
 opxy::platform::Address opxy::platform::host_stock_address(Address address) {
@@ -253,6 +274,46 @@ int main() {
         sdk_synth_press(0); ++presses; shown(0,1,2,3);
         engine = 34; key = 53;
     }
+
+    // A callback maps one detent straight to the next model-specific choice,
+    // while the existing editor still owns storage, paging and publication.
+    engine = 39; key = 53; shifted = false; shown(0,1,2,3);
+    const u32 plus[3] = {0,1,0}, minus[3] = {0,static_cast<u32>(-1),0};
+    const u8 initial[8] = {16,21,22,23,24,25,26,27};
+    require(drum_pack(0, initial, regions[0] + 1));
+    reinterpret_cast<u8*>(regions[0])[24] = drum_mark(0);
+    sdk_drum_edit(53,0,plus,0);
+    require(sdk_drum_values(0,&model,raw) && raw[0] == 48);
+    sdk_drum_edit(53,0,plus,0);
+    require(sdk_drum_values(0,&model,raw) && raw[0] == 112);
+    const u32 boundary = publications;
+    sdk_drum_edit(53,0,plus,0);
+    require(publications == boundary);
+    sdk_drum_edit(53,0,minus,0);
+    require(sdk_drum_values(0,&model,raw) && raw[0] == 48);
+    sdk_drum_edit(53,1,plus,0);
+    require(sdk_drum_values(0,&model,raw) && raw[1] == 22);
+    const u32 calls = edit_calls;
+    sdk_drum_edit(53,2,plus,0);  // unnamed gap
+    sdk_drum_edit(53,4,plus,0);  // Shift model, not an editable value
+    require(edit_calls == calls);
+    require(sdk_drum_values(0,&model,raw) && model == 1);
+    sdk_drum_edit(53,0,plus,0);  // the short model skips its missing middle option
+    require(sdk_drum_values(0,&model,raw) && raw[0] == 112);
+    sdk_drum_edit(53,4,minus,0);
+    sdk_synth_press(0); ++presses; shown(4,5,6,7);
+    sdk_drum_edit(53,0,plus,0);
+    require(sdk_drum_values(0,&model,raw) && raw[4] == 25);
+    invalid_edit = true;
+    const u32 rejected = publications;
+    sdk_drum_edit(53,0,plus,0);
+    require(publications == rejected && sdk_drum_values(0,&model,raw) && raw[4] == 25);
+    invalid_edit = false;
+    const u32 huge[3] = {0,0x80000000u,0};
+    sdk_drum_edit(53,0,huge,0);
+    require(edit_delta == -127 && sdk_drum_values(0,&model,raw) && raw[4] == 0);
+    sdk_synth_press(0); ++presses; shown(0,1,2,3);
+    engine = 34;
 
     ownership = 0;
     require(sdk_drum_edit(53, 0, one, 0) == 1234 && fallback == 1);

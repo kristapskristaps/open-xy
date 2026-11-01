@@ -330,6 +330,23 @@ const char* parameter_name(opxy::u32 model, opxy::u32 slot);
 opxy::u32 parameter_count(opxy::u32 model); // 0..8: slots 0 to count - 1 are used
 ```
 
+A kit can declare `resources.parameterEdit: 1` and add this callback in
+`core.h` and its engine:
+
+```cpp
+opxy::u32 edit_parameter(opxy::u32 model, opxy::u32 slot,
+                        opxy::u32 value, opxy::i32 delta);
+```
+
+It edits a used control on the GUI role, before stock's existing pad publication.
+`value` is the stored 0..127 value and `delta` the signed detent count, bounded
+to -127..127. Return a new 0..127 value, or the input value for no change; an
+out-of-range result is ignored. Shift's type/group/choke controls and unnamed
+slots never call it. Without this flag, controls keep their existing unit
+steps. A kit with a per-model discrete selector can use this callback to jump
+directly to the next available option while other controls keep unit steps.
+It does not run during audio rendering or alter saved-value encoding.
+
 Keys passed to `drum_defaults` are canonical keys 53..76. Controls are
 integers 0..127; the model must be below `modelCount`. In a kit of more than 16
 models, a key on a model of seven or fewer controls stores its first seven, so
@@ -733,8 +750,13 @@ firmware that holds it.
 - At most 16 presets, each at most 16 KiB.
 - Each is a version 4 OP-XY preset whose `type` is the machine's ID, with
   eight engine `params` from 0 to 32767 and no sample `regions`, since a
-  preset never points into a user's sample library. Other fields stay as the
-  device saved them.
+  preset never points into a user's sample library. A synthesis drum kit may
+  instead store exactly 24 sample-free pad records: `model` is `"fm slap"`
+  (the SDK's stored-pad marker), `params` are its four packed Q15 words, and
+  optional `playmode` names a stock choke/play mode. An optional `hikey` is
+  the canonical key 53..76 in pad order. No other region fields or sample
+  paths are accepted. Keep track parameters neutral to edit saved pad controls
+  freely after loading a kit. Other fields stay as the device saved them.
 
 ### Identity
 

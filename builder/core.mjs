@@ -780,6 +780,16 @@ export function presetPath(machine) {
 // The machine's init preset, then its own presets (tooling.machines.read_presets):
 // each a version 4 preset of this machine, pointing at no samples. Its own
 // default replaces the generated init preset.
+function drumPresetRegions(regions) {
+  return Array.isArray(regions) && regions.length === 24 && regions.every((region,index) =>
+    region && typeof region === 'object' && !Array.isArray(region) && region.model === 'fm slap' &&
+    Object.keys(region).every(key => ['model','params','playmode','hikey'].includes(key)) &&
+    Array.isArray(region.params) && region.params.length === 4 &&
+    region.params.every(n => Number.isInteger(n) && n >= 0 && n <= 32767) &&
+    ['gate','oneshot','mute1','loop','mute2','mute3'].includes(Object.hasOwn(region,'playmode') ? region.playmode : 'oneshot') &&
+    (!Object.hasOwn(region,'hikey') || region.hikey === 53+index));
+}
+
 export function presetFiles(machine) {
   const path = presetPath(machine);
   if (!path) return {};
@@ -791,7 +801,8 @@ export function presetFiles(machine) {
     const params = preset?.engine?.params;
     check(/^[a-z0-9][a-z0-9_-]{0,23}$/.test(name) && preset && typeof preset === 'object' &&
       preset.version === 4 && preset.platform === 'OP-XY' && preset.type === machine.id &&
-      Array.isArray(preset.regions) && preset.regions.length === 0 && Array.isArray(params) && params.length === 8 &&
+      (Array.isArray(preset.regions) && preset.regions.length === 0 || machine.kind === 'drum' && drumPresetRegions(preset.regions)) &&
+      Array.isArray(params) && params.length === 8 &&
       params.every(n => Number.isInteger(n) && n >= 0 && n <= 32767), 'Invalid machine preset: ' + name);
     files[`content/presets/${machine.id}/${name}.json`] = preset;
   }
